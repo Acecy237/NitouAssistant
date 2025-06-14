@@ -1,0 +1,17 @@
+{
+    "Author": "cy237",
+    "Name": "Nitou Assistant",
+    "Punchline": "你开八服连车",
+    "Description": "解放A车车头，群友都做人形凶兽",
+    "InternalName": "NitouAssistant",
+    "AssemblyVersion": "1.0.0.0",
+    "TestingAssemblyVersion": "1.0.0.0",
+    "DalamudApiLevel": 11,
+    "ApplicableVersion": "latest",
+    "RepoUrl": "https://github.com/Acecy237/NitouAssistant",
+    "Tags": [
+        "navigation",
+        "teleport",
+        "vnavmesh"
+    ],
+}
