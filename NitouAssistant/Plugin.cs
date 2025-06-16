@@ -14,12 +14,13 @@ public sealed class Plugin : IDalamudPlugin
     [PluginService] internal static IDalamudPluginInterface PluginInterface { get; private set; } = null!;
     [PluginService] internal static ICommandManager CommandManager { get; private set; } = null!;
     [PluginService] internal static IClientState ClientState { get; private set; } = null!;
+    [PluginService] internal static IObjectTable ObjectTable { get; private set; } = null!;
     [PluginService] internal static ICondition Condition { get; private set; } = null!;
     [PluginService] internal static IChatGui Chat { get; private set; } = null!;
     [PluginService] internal static IFramework Framework { get; set; } = null!;
 
-    private const string MainUiCmooand = "/nitou";
-    private const string CfgUiCommand = "/nitoucfg";
+    private const string MainUiCmooand = "/nta";
+    private const string CfgUiCommand = "/ntacfg";
 
     public Configuration Configuration { get; init; }
 
