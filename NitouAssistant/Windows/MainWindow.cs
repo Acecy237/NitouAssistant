@@ -382,9 +382,8 @@ public unsafe class MainWindow : Window, IDisposable
         var playerPos = player.Position;
         var distance = Vector3.Distance(playerPos, target);
 
-        if (distance < 70f)
+        if (distance < 70f || CheckAndUpdateEliteMark())
         {
-            CheckAndUpdateEliteMark();
             currentPointIndex++;
             lastFlyTarget = null;
             stuckStartTime = null;
@@ -425,18 +424,16 @@ public unsafe class MainWindow : Window, IDisposable
         }
     }
 
-    private void CheckAndUpdateEliteMark()
+    private bool CheckAndUpdateEliteMark()
     {
         var player = Plugin.ClientState.LocalPlayer;
-        if (player == null) return;
+        if (player == null) return false;
 
         var playerPos = player.Position;
 
         foreach (IBattleChara battle in Plugin.ObjectTable.OfType<IBattleChara>())
         {
             float distance = Vector3.Distance(playerPos, battle.Position);
-            if (distance > 100f)
-                continue;
 
             uint nameId = battle.NameId;
 
@@ -450,8 +447,11 @@ public unsafe class MainWindow : Window, IDisposable
             eliteMarkCount++;
             totalEliteMarkCount++;
 
-            Plugin.Chat.Print($"发现第 {eliteMarkCount} 只 A 怪：{battle.Name.TextValue}");
+            Plugin.Chat.Print($"发现第 {totalEliteMarkCount} 只 A 怪：{battle.Name.TextValue}");
+
+            return true;
         }
+        return false;
     }
 
     /* -------------------- Helper class for getPath -------------------- */
