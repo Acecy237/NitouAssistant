@@ -1,10 +1,12 @@
 using Dalamud.Game.ClientState.Conditions;
+using Dalamud.Game.ClientState.Objects.Types;
 
 using Dalamud.Interface.Utility;
 using Dalamud.Interface.Utility.Raii;
 using Dalamud.Interface.Windowing;
 using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Client.Game;
+using FFXIVClientStructs.FFXIV.Client.Game.Character;
 using FFXIVClientStructs.FFXIV.Client.Game.UI;
 using FFXIVClientStructs.FFXIV.Client.System.Framework;
 using ImGuiNET;
@@ -15,6 +17,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
 using System.Threading.Tasks;
+using System.Xml.Linq;
 using static FFXIVClientStructs.FFXIV.Client.Game.UI.Telepo.Delegates;
 using static NitouAssistant.data.MapMetaData;
 using static System.Runtime.InteropServices.JavaScript.JSType;
@@ -30,32 +33,42 @@ public unsafe class MainWindow : Window, IDisposable
     private int versionsSelectedIndex = 0;
     private Dictionary<string, bool> mapSelection = new();
 
+    // Task State Management
     private enum TaskState
     {
         Idle,
         Prepare,
         Teleporting,
-        WaitingMapLoad,
+        PreparingFlight,
         Flying,
     }
     private TaskState currentState = TaskState.Idle;
 
+    // Map Queue
     private int nextMapIndex = 0;
     private List<string> mapQueue = new();
 
+    // Teleport
     private DateTime teleportAttemptTime = DateTime.MinValue;
     private DateTime lastTeleportRetryTime = DateTime.MinValue;
 
+    // Fly
     private int currentPointIndex = 0;
     private List<(float X, float Y, float Z)> currentPointsList = new();
 
+    // Stuck detection
     private Vector3? lastFlyTarget = null;
     private Vector3 lastPlayerPos = Vector3.Zero;
     private DateTime? stuckStartTime = null;
 
+    // Hunt Count
+    private int eliteMarkCount = 0;
+    private int totalEliteMarkCount = 0;
+    private HashSet<uint> currentEliteMarks = new();
+
 
     public MainWindow(Plugin plugin)
-        : base("Nitou Assistant##NitouAssistant", ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse)
+        : base("泥头A车小助手##NitouAssistant", ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse)
     {
         Size = new Vector2(200, 100);
         SizeCondition = ImGuiCond.FirstUseEver;
@@ -87,25 +100,15 @@ public unsafe class MainWindow : Window, IDisposable
             case TaskState.Prepare:
                 PrepareNextMap();
                 break;
-            case TaskState.WaitingMapLoad:
-                {
-                    state = "计算最优路径";
-                    CheckMapReadyToFly();
-                    break;
-                }
             case TaskState.Teleporting:
                 {
-                    if (!Plugin.Condition[ConditionFlag.Casting] && !Plugin.Condition[ConditionFlag.BetweenAreas])
-                    {
-                        if ((DateTime.Now - teleportAttemptTime).TotalSeconds <= 1)
-                            break;
-                        if ((DateTime.Now - lastTeleportRetryTime).TotalSeconds >= 1)
-                        {
-                            Plugin.Chat.Print("传送被打断，重试中...");
-                            currentState = TaskState.Prepare;
-                            lastTeleportRetryTime = DateTime.Now;
-                        }
-                    }
+                    HandleTeleporting();
+                    break;
+                }
+            case TaskState.PreparingFlight:
+                {
+                    state = "计算最优路径";
+                    PrepareMapForFlying();
                     break;
                 }
             case TaskState.Flying:
@@ -119,14 +122,18 @@ public unsafe class MainWindow : Window, IDisposable
     public override void Draw()
     {
         ImGui.PushTextWrapPos();
-        ImGui.TextUnformatted("欢迎使用 Nitou Assistant 插件！\n" +
-            "这个插件用于解放泥头车头找怪，让车头在找怪期间去打OW\n" +
-            "依赖插件: Vnavmesh、Teleport");
+        ImGui.TextUnformatted("功能:自动寻路找A怪\n" +
+            "依赖插件: Vnavmesh、Teleporter");
         ImGui.PopTextWrapPos();
 
         ImGui.Separator();
 
         ImGui.Text($"状态：{state}");
+
+        if (!(currentState == TaskState.Idle))
+        {
+            ImGui.Text($"A怪进度:{totalEliteMarkCount}/12");
+        }
 
         using (var combo = ImRaii.Combo("##版本Combo", MapMetaData.VersionOptions[versionsSelectedIndex]))
         {
@@ -185,13 +192,7 @@ public unsafe class MainWindow : Window, IDisposable
         ImGui.SameLine();
         if (ImGui.Button("停止"))
         {
-            VnavmeshStop();
-            currentState = TaskState.Idle;
-            nextMapIndex = 0;
-            mapQueue.Clear();
-            currentPointsList.Clear();
-            lastFlyTarget = null;
-            stuckStartTime = null;
+            ResetTaskState();
         }
     }
 
@@ -234,12 +235,43 @@ public unsafe class MainWindow : Window, IDisposable
         return selectedMaps;
     }
 
+    /* -------------------- Task State Management -------------------- */
+    private void ResetTaskState()
+    {
+        VnavmeshStop();
+
+        currentState = TaskState.Idle;
+        state = "未运行";
+
+        // 地图流程
+        nextMapIndex = 0;
+        mapQueue.Clear();
+
+        // 传送状态
+        teleportAttemptTime = DateTime.MinValue;
+        lastTeleportRetryTime = DateTime.MinValue;
+
+        // 飞行路径
+        currentPointIndex = 0;
+        currentPointsList.Clear();
+
+        // 卡点检测
+        lastFlyTarget = null;
+        lastPlayerPos = Vector3.Zero;
+        stuckStartTime = null;
+
+        // 精英怪状态
+        eliteMarkCount = 0;
+        totalEliteMarkCount = 0;
+        currentEliteMarks.Clear();
+    }
+
     private void PrepareNextMap()
     {
         if (nextMapIndex >= mapQueue.Count)
         {
             state = "所有地图已完成";
-            currentState = TaskState.Idle;
+            ResetTaskState();
             return;
         }
 
@@ -257,32 +289,63 @@ public unsafe class MainWindow : Window, IDisposable
         }
         else
         {
-            currentState = TaskState.WaitingMapLoad;
+            currentState = TaskState.PreparingFlight;
             return;
+        }
+    }
+
+    private void HandleTeleporting()
+    {
+
+        if (!Plugin.Condition[ConditionFlag.Casting] && !Plugin.Condition[ConditionFlag.BetweenAreas])
+        {
+            double sinceTeleport = (DateTime.Now - teleportAttemptTime).TotalSeconds;
+            double sinceRetry = (DateTime.Now - lastTeleportRetryTime).TotalSeconds;
+            if (sinceTeleport <= 2)
+                return;
+            if ((sinceTeleport <= 4 || sinceTeleport >= 7) && sinceRetry >= 2)
+            {
+                Plugin.Chat.Print("传送被打断，重试中...");
+                currentState = TaskState.Prepare;
+                lastTeleportRetryTime = DateTime.Now;
+            }
+
         }
     }
 
     private void OnTerritoryChanged(ushort newTerritory)
     {
-        currentState = TaskState.WaitingMapLoad;
+        currentState = TaskState.PreparingFlight;
     }
 
-    private void CheckMapReadyToFly()
+    private void CheckMount()
+    {
+        if (!Plugin.Condition[ConditionFlag.Mounted] && !Plugin.Condition[ConditionFlag.Mounting])
+        {
+            Mount();
+        }
+    }
+
+    private void PrepareMapForFlying()
     {
         if (Plugin.ClientState.LocalPlayer != null && Plugin.ClientState.TerritoryType != 0)
         {
+            currentEliteMarks.Clear();
+            eliteMarkCount = 0;
+            currentPointIndex = 0;
+
+            CheckMount();
             var currentMap = mapQueue[nextMapIndex];
             currentPointsList = MapMetaData.RankASpawnPoints.Points[currentMap];
             var currentPos = Plugin.ClientState.LocalPlayer.Position;
             currentPointsList = PathHelper.GetGreedy2OptPath(currentPointsList, currentPos);
-            currentPointIndex = 0;
             currentState = TaskState.Flying;
         }
     }
 
     private void FlyToNextPoint()
     {
-        if (currentPointIndex >= currentPointsList.Count)
+        if (currentPointIndex >= currentPointsList.Count || eliteMarkCount >= 2 )
         {
             state = "当前地图飞行完成，切换下一个地图";
             nextMapIndex++;
@@ -301,18 +364,18 @@ public unsafe class MainWindow : Window, IDisposable
         var playerPos = player.Position;
         var distance = Vector3.Distance(playerPos, target);
 
-        if (distance < 75f)
+        if (distance < 70f)
         {
+            CheckAndUpdateEliteMark();
             currentPointIndex++;
             lastFlyTarget = null;
             stuckStartTime = null;
             return;
         }
 
-        float stillThreshold = 0.01f;
-        bool isExactlyStill = Vector3.Distance(playerPos, lastPlayerPos) < stillThreshold;
-
-        if (isExactlyStill)
+        // Check if player is stuck
+        const float stillThreshold = 0.01f;
+        if (Vector3.Distance(playerPos, lastPlayerPos) < stillThreshold)
         {
             if (stuckStartTime == null)
             {
@@ -341,6 +404,35 @@ public unsafe class MainWindow : Window, IDisposable
             Flyto(target.X, target.Y, target.Z);
             lastFlyTarget = target;
             state = $"飞往第 {currentPointIndex + 1}/{currentPointsList.Count} 个点...";
+        }
+    }
+
+    private void CheckAndUpdateEliteMark()
+    {
+        var player = Plugin.ClientState.LocalPlayer;
+        if (player == null) return;
+
+        var playerPos = player.Position;
+
+        foreach (IBattleChara battle in Plugin.ObjectTable.OfType<IBattleChara>())
+        {
+            float distance = Vector3.Distance(playerPos, battle.Position);
+            if (distance > 100f)
+                continue;
+
+            uint nameId = battle.NameId;
+
+            if (!MapMetaData.mobsNameId.Contains(nameId))
+                continue;
+
+            if (currentEliteMarks.Contains(nameId))
+                continue;
+
+            currentEliteMarks.Add(nameId);
+            eliteMarkCount++;
+            totalEliteMarkCount++;
+
+            Plugin.Chat.Print($"发现第 {eliteMarkCount} 只 A 怪：{battle.Name.TextValue}");
         }
     }
 
