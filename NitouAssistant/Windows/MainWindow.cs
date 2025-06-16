@@ -80,14 +80,12 @@ public unsafe class MainWindow : Window, IDisposable
         versionsSelectedIndex = Configuration.SelectedVersionIndex;
 
         Plugin.Framework.Update += Update;
-        Plugin.ClientState.TerritoryChanged += OnTerritoryChanged;
-
+        
     }
 
     public void Dispose() 
     {
         Plugin.Framework.Update -= Update;
-        Plugin.ClientState.TerritoryChanged -= OnTerritoryChanged;
 
     }
 
@@ -186,10 +184,7 @@ public unsafe class MainWindow : Window, IDisposable
 
         if (ImGui.Button("开始"))
         {
-            is_running = true;
-            mapQueue = getMapList();
-            nextMapIndex = 0;
-            currentState = TaskState.Prepare;
+            StartTask();
         }
         ImGui.SameLine();
         if (ImGui.Button("停止"))
@@ -238,11 +233,27 @@ public unsafe class MainWindow : Window, IDisposable
     }
 
     /* -------------------- Task State Management -------------------- */
+    private void StartTask()
+    {
+        if (is_running)
+        {
+            Plugin.Chat.Print("任务已经在运行中。");
+            return;
+        }
+        ResetTaskState();
+        is_running = true;
+        Plugin.ClientState.TerritoryChanged += OnTerritoryChanged;
+        mapQueue = getMapList();
+        nextMapIndex = 0;
+        currentState = TaskState.Prepare;
+    }
+
     private void ResetTaskState()
     {
         VnavmeshStop();
 
         is_running = false;
+        Plugin.ClientState.TerritoryChanged -= OnTerritoryChanged;
 
         currentState = TaskState.Idle;
         state = "未运行";
@@ -319,10 +330,10 @@ public unsafe class MainWindow : Window, IDisposable
 
     private void OnTerritoryChanged(ushort newTerritory)
     {
-        if (is_running)
-        {
-            currentState = TaskState.PreparingFlight;
-        }
+        if (!is_running || currentState != TaskState.Teleporting)
+            return;
+
+        currentState = TaskState.PreparingFlight;
     }
 
     private void CheckMount()
@@ -341,7 +352,6 @@ public unsafe class MainWindow : Window, IDisposable
             eliteMarkCount = 0;
             currentPointIndex = 0;
 
-            CheckMount();
             var currentMap = mapQueue[nextMapIndex];
             currentPointsList = MapMetaData.RankASpawnPoints.Points[currentMap];
             var currentPos = Plugin.ClientState.LocalPlayer.Position;
@@ -363,6 +373,7 @@ public unsafe class MainWindow : Window, IDisposable
             return;
         }
 
+        CheckMount();
         var targetTuple = currentPointsList[currentPointIndex];
         var target = new Vector3(targetTuple.X, targetTuple.Y, targetTuple.Z);
         var player = Plugin.ClientState.LocalPlayer;
