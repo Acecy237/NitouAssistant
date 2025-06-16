@@ -30,6 +30,7 @@ public unsafe class MainWindow : Window, IDisposable
     private Configuration Configuration;
 
     private string state = "";
+    private bool is_running = false;
     private int versionsSelectedIndex = 0;
     private Dictionary<string, bool> mapSelection = new();
 
@@ -185,6 +186,7 @@ public unsafe class MainWindow : Window, IDisposable
 
         if (ImGui.Button("开始"))
         {
+            is_running = true;
             mapQueue = getMapList();
             nextMapIndex = 0;
             currentState = TaskState.Prepare;
@@ -239,6 +241,8 @@ public unsafe class MainWindow : Window, IDisposable
     private void ResetTaskState()
     {
         VnavmeshStop();
+
+        is_running = false;
 
         currentState = TaskState.Idle;
         state = "未运行";
@@ -315,7 +319,10 @@ public unsafe class MainWindow : Window, IDisposable
 
     private void OnTerritoryChanged(ushort newTerritory)
     {
-        currentState = TaskState.PreparingFlight;
+        if (is_running)
+        {
+            currentState = TaskState.PreparingFlight;
+        }
     }
 
     private void CheckMount()
