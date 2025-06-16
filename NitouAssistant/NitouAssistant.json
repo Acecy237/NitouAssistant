@@ -1,12 +1,10 @@
 {
+    "Author": "cy237",
     "Name": "泥头A车小助手",
     "InternalName": "NitouAssistant",
-    "AssemblyVersion": "1.0.1",
-    "Author": "cy237",
     "Punchline": "让找怪成为一件轻松的事，让开车成为爱上的事！",
-    "Description": "自动找怪，节约车头的精力，依赖插件:Vnavmesh，Teleporter",
+    "Description": "自动找怪，依赖插件:Vnavmesh,Teleporter",
     "ApplicableVersion": "any",
-    "LoadPriority": 0,
     "Tags": [
         "狩猎",
         "自动"
