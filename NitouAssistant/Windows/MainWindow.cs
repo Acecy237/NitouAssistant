@@ -298,7 +298,7 @@ public unsafe class MainWindow : Window, IDisposable
         {
             TeleportToMap(nextMap);
             state = $"正在传送到 {nextMap}";
-            teleportAttemptTime = DateTime.Now;
+            teleportAttemptTime = DateTime.Now; 
             currentState = TaskState.Teleporting;
             return;
         }
