@@ -5,7 +5,10 @@
     <PackageLicenseExpression>AGPL-3.0-or-later</PackageLicenseExpression>
     <IsPackable>false</IsPackable>
 </PropertyGroup>
-<ItemGroup>
-  <Content Include="NitouAssistant.json" />
-</ItemGroup>
+    <ItemGroup>
+      <Content Include="NitouAssistant.json" />
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\ECommons\ECommons\ECommons.csproj" />
+    </ItemGroup>
 </Project>

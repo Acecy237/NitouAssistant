@@ -6,6 +6,7 @@ using Dalamud.Plugin.Services;
 using NitouAssistant.data;
 using NitouAssistant.Windows;
 using System.IO;
+using ECommons;
 
 namespace NitouAssistant;
 
@@ -63,6 +64,8 @@ public sealed class Plugin : IDalamudPlugin
             }
             Configuration.Save();
         }
+
+        ECommonsMain.Init(PluginInterface, this);
     }
 
     public void Dispose() // 析构函数
@@ -74,6 +77,8 @@ public sealed class Plugin : IDalamudPlugin
 
         CommandManager.RemoveHandler(MainUiCmooand);
         CommandManager.RemoveHandler(CfgUiCommand);
+
+        ECommonsMain.Dispose();
     }
 
     private void UiOnCommand(string command, string args)
